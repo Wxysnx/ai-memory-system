@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ray-head
+  labels:
+    app: ray
+    component: head
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ray
+      component: head
+  template:
+    metadata:
+      labels:
+        app: ray
+        component: head
+    spec:
+      containers:
+      - name: ray-head
+        image: rayproject/ray:2.7.0
+        ports:
+        - containerPort: 6379  # Redis port for Ray
+        - containerPort: 8265  # Ray dashboard
+        - containerPort: 10001 # Ray client server
+        - containerPort: 8000  # Ray Serve
+        command: ["/bin/bash", "-c", "--"]
+        args: ["ray start --head --port=6379 --dashboard-host=0.0.0.0 --block"]
+        resources:
+          limits:
+            cpu: "2"
+            memory: "4Gi"
+          requests:
+            cpu: "1"
+            memory: "2Gi"
+        readinessProbe:
+          tcpSocket:
+            port: 8265
+          initialDelaySeconds: 15
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ray-service
+spec:
+  selector:
+    app: ray
+    component: head
+  ports:
+  - name: client
+    port: 10001
+    targetPort: 10001
+  - name: dashboard
+    port: 8265
+    targetPort: 8265
+  - name: serve
+    port: 8000
+    targetPort: 8000
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ray-worker
+  labels:
+    app: ray
+    component: worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ray
+      component: worker
+  template:
+    metadata:
+      labels:
+        app: ray
+        component: worker
+    spec:
+      containers:
+      - name: ray-worker
+        image: rayproject/ray:2.7.0
+        command: ["/bin/bash", "-c", "--"]
+        args: ["ray start --address=ray-service:10001 --block"]
+        resources:
+          limits:
+            cpu: "2"
+            memory: "4Gi"
+            nvidia.com/gpu: 1
+          requests:
+            cpu: "500m"
+            memory: "2Gi" 
